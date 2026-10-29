@@ -1,18 +1,59 @@
-name: Test React App
+name: Test React App (Intermediate)
 
 on:
   push:
     branches: [main]
+    paths:
+      - src/**
   pull_request:
     branches: [main]
+    paths:
+      - src/**
+
+env:
+  APP_NAME: "React App"
 
 jobs:
   test:
     runs-on: ubuntu-latest
-
+    env:
+      NODE_VERSION: "18"
     steps:
       - name: Check out repository code
         uses: actions/checkout@v5
+
+      - name: Display the branch name
+        run: |
+          echo "Ref: ${{ github.ref }}"
+          echo "Branch name: ${{ github.ref_name }}"
+
+      - name: Display the commit SHA
+        run: |
+          echo "Commit SHA: ${{ github.sha }}"
+
+      - name: Display the event name
+        run: |
+          echo "Event name: ${{ github.event_name }}"
+
+      - name: Display variables
+        env:
+          TEST_FLAG: "true"
+        run: |
+          echo "APP_NAME (workflow): ${{ env.APP_NAME }}"
+          echo "NODE_VERSION (job): ${{ env.NODE_VERSION }}"
+          echo "TEST_FLAG (step): ${{ env.TEST_FLAG }}"
+
+      - name: Push event message
+        if: github.event_name == 'push'
+        run: echo "This is a push event"
+
+      - name: Pull request event message
+        if: github.event_name == 'pull_request'
+        run: echo "This is a pull request event"
+
+      - name: Display extra flag
+        run: |
+          echo "EXTRA_FLAG: ${{ env.EXTRA_FLAG || 'none' }}"
 
       - name: Set up Node.js
         uses: actions/setup-node@v5
@@ -24,4 +65,5 @@ jobs:
         run: npm install
 
       - name: Run tests
+        if: ${{ !contains(github.event.head_commit.message, '[skip-tests]')}}
         run: npm test
