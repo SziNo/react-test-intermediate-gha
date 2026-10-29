@@ -1,10 +1,16 @@
-# React Test Workflow – GitHub Actions gyakorló projekt!
+# React Test Workflow – Intermediate GitHub Actions gyakorló projekt
 
-![Test React App](https://github.com/SziNo/react-test-github-actions-workflow/actions/workflows/test.yml/badge.svg)
+![Test React App (Intermediate)](https://github.com/SziNo/react-test-intermediate-gha/actions/workflows/test.yml/badge.svg)
 
-Egy Vite-tal generált React alkalmazás, amelynek tesztjei minden `main` branch-re érkező push és pull request esetén automatikusan lefutnak GitHub Actionsben.
+Egy Vite-tal generált React alkalmazás, amelynek tesztjei GitHub Actionsben futnak. Az előző, alap workflow-t ez a projekt kiegészíti haladóbb funkciókkal:
 
-Ez a README egyben egy lépésről lépésre követhető leírás is: ha egy hasonló projektet nulláról kell felállítani, az itt leírt sorrendben végig lehet menni rajta.
+- **Event filterek**: csak a `main` branch-en és csak az `src/` mappa változásakor fut.
+- **Context**: kiírja a branch-et, a commit SHA-t és az eseményt a `github` contextből.
+- **Változók**: `env` workflow, job és step szinten.
+- **Feltételek**: `if` kifejezésekkel futó vagy kihagyott lépések.
+- **Kifejezések**: alapértelmezett érték a `||` operátorral.
+
+A README egyben lépésről lépésre követhető leírás is, amivel egy hasonló projekt nulláról felállítható.
 
 ## Technológiák
 
@@ -13,7 +19,7 @@ Ez a README egyben egy lépésről lépésre követhető leírás is: ha egy has
 | Node.js (nvm-mel kezelve)        | 24 LTS | JavaScript futtatókörnyezet                     |
 | Vite                             | 8      | Projektgenerálás, fejlesztői szerver, build     |
 | React                            | 19     | UI könyvtár                                     |
-| Vitest                           | 5      | Tesztfuttató (a Vite „saját” Jest-megfelelője)  |
+| Vitest                           | 5      | Tesztfuttató                                    |
 | React Testing Library + jest-dom | –      | Komponensek renderelése és ellenőrzése tesztben |
 | jsdom                            | –      | Szimulált böngésző Node alatt                   |
 | GitHub Actions                   | –      | CI: a tesztek automatikus futtatása             |
@@ -22,18 +28,39 @@ Fejlesztői környezet: WSL2, Ubuntu 24.
 
 ---
 
-## 1. Egyszeri környezetbeállítás (WSL2)
+## 1. A projekt létrehozása template-ből
 
-Ezeket a lépéseket gépenként csak egyszer kell elvégezni.
+Ez a repó az előző feladat repójából (`react-test-github-actions-workflow`) készült, amely **Template repository**-ként van beállítva (Settings → General).
 
-### 1.1 Git azonosító
+1. Az eredeti repó oldalán: **Use this template → Create a new repository**.
+2. Klónozás SSH-val, telepítés, próbafuttatás:
+
+```bash
+cd ~/codecool/GithubActions
+git clone git@github.com:SziNo/react-test-intermediate-gha.git
+cd react-test-intermediate-gha
+npm install
+npm test
+```
+
+3. A `package.json`-ban a `"name"` mezőt átírni az új projekt nevére, a README-ben pedig a badge-et és a repóneveket frissíteni.
+
+A template-ből készült repó egyetlen kezdő committal indul, a régi commit-történet nem jön át.
+
+---
+
+## 2. Egyszeri környezetbeállítás (WSL2)
+
+Ha a gép már be van állítva, ez a rész átugorható.
+
+### 2.1 Git azonosító
 
 ```bash
 git config --global user.name "Neved"
 git config --global user.email "te@emailed.hu"
 ```
 
-### 1.2 SSH kulcs a GitHubhoz
+### 2.2 SSH kulcs a GitHubhoz
 
 A WSL-nek saját `~/.ssh` mappája van, a Windows alatti kulcsok itt nem számítanak.
 
@@ -42,90 +69,56 @@ ssh-keygen -t ed25519 -C "te@emailed.hu"   # Enter az útvonalnál
 cat ~/.ssh/id_ed25519.pub                  # ezt a sort kell kimásolni
 ```
 
-A kimásolt publikus kulcsot a GitHubon a **Settings → SSH and GPG keys → New SSH key** menüpontban kell hozzáadni. Ellenőrzés:
+A publikus kulcsot a GitHubon a **Settings → SSH and GPG keys → New SSH key** menüpontban kell hozzáadni. Ellenőrzés:
 
 ```bash
 ssh -T git@github.com
 # Hi <felhasználónév>! You've successfully authenticated, but GitHub does not provide shell access.
 ```
 
-Az első csatlakozáskor a gép rákérdez a GitHub fingerprintjére. Ha az ED25519 kulcs `SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU`, akkor `yes`.
+> A privát kulcsot (`id_ed25519`, `.pub` nélkül) soha nem adjuk ki senkinek.
 
-> A privát kulcsot (`id_ed25519`, `.pub` nélkül) soha nem adjuk ki senkinek, semmilyen lab vagy külső oldal számára sem.
-
-### 1.3 Node.js telepítése nvm-mel
+### 2.3 Node.js nvm-mel
 
 ```bash
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
 source ~/.bashrc
 nvm install 24
 nvm alias default 24
-node -v   # v24.x.x
-npm -v    # 11.x.x
 ```
 
-Hasznos nvm parancsok:
-
-```bash
-nvm ls              # telepített verziók
-nvm use 22          # váltás az aktuális terminálban
-nvm alias default 24  # alapértelmezett verzió
-nvm use             # a projekt .nvmrc fájljában megadott verzióra vált
-```
+A projekt gyökerében lévő `.nvmrc` fájl (tartalma: `24`) rögzíti a verziót: lokálisan az `nvm use`, a CI-ban a `setup-node` olvassa.
 
 ---
 
-## 2. Repó létrehozása és klónozása
+## 3. A React app és a tesztek (nulláról)
 
-1. A GitHubon új repó létrehozása, az **Add a README file** opció bepipálásával.
-2. Klónozás **SSH-s** címmel (a „Code” gomb → SSH fül):
+Ha nem template-ből indulunk, így állítható fel az alap.
 
-```bash
-git clone git@github.com:SziNo/react-test-github-actions-workflow.git
-cd react-test-github-actions-workflow
-```
-
-**Miért SSH és nem HTTPS?** Klónozni mindkettővel lehet, de HTTPS-en a push Personal Access Tokent kérne. SSH-val a beállított kulcs elintézi az azonosítást.
-
-**Kell-e `git remote add` és `git push -u`?** Klónozás után nem: a `git clone` beállítja az `origin` remote-ot, és a `main` már követi az `origin/main`-t. Ellenőrzés: `git remote -v` és `git branch -vv`. A `-u` csak akkor kell, ha egy **új, csak helyben létező branch-et** pusholunk először (`git push -u origin branch-neve`), vagy ha `git init`-tel helyben indítottuk a repót.
-
----
-
-## 3. React app generálása Vite-tal
-
-A repó mappájában:
+### 3.1 Vite projekt
 
 ```bash
 npm create vite@latest . -- --template react
 ```
 
-A `.` miatt az aktuális mappába generál. A kérdésekre adott válaszok:
-
-| Kérdés                          | Válasz                                                |
-| ------------------------------- | ----------------------------------------------------- |
-| Ok to proceed?                  | `y`                                                   |
-| Current directory is not empty  | **Ignore files and continue** (így megmarad a README) |
-| Which linter to use?            | ESLint                                                |
-| Install with npm and start now? | No (kézzel csináljuk)                                 |
-
-Telepítés és próbaindítás:
+| Kérdés                          | Válasz                        |
+| ------------------------------- | ----------------------------- |
+| Current directory is not empty  | **Ignore files and continue** |
+| Which linter to use?            | ESLint                        |
+| Install with npm and start now? | No                            |
 
 ```bash
 npm install
 npm run dev     # http://localhost:5173/  →  leállítás: Ctrl+C
 ```
 
----
-
-## 4. Tesztkörnyezet: Vitest + React Testing Library
-
-### 4.1 Csomagok
+### 3.2 Vitest és Testing Library
 
 ```bash
 npm install -D vitest @testing-library/react @testing-library/jest-dom jsdom
 ```
 
-### 4.2 `vite.config.js`
+`vite.config.js`:
 
 ```js
 import { defineConfig } from "vite";
@@ -134,30 +127,28 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   plugins: [react()],
   test: {
-    environment: "jsdom", // szimulált böngésző
-    globals: true, // a Testing Library automatikus takarításához kell
+    environment: "jsdom",
+    globals: true,
     setupFiles: "./src/setupTests.js",
   },
 });
 ```
 
-### 4.3 `src/setupTests.js`
+`src/setupTests.js`:
 
 ```js
 import "@testing-library/jest-dom/vitest";
 ```
 
-Minden teszt előtt lefut, és bekapcsolja az olyan ellenőrzéseket, mint a `toBeInTheDocument()`.
-
-### 4.4 Teszt script a `package.json`-ban
+`package.json` → `scripts`:
 
 ```json
 "test": "vitest run"
 ```
 
-A `run` miatt a Vitest egyszer lefut és kilép, nem marad watch módban. Így lokálisan és a CI-ban is ugyanúgy viselkedik.
+A `run` miatt a Vitest egyszer lefut és kilép (nem marad watch módban).
 
-### 4.5 `src/App.test.jsx`
+### 3.3 A teszt: `src/App.test.jsx`
 
 ```jsx
 import { describe, it, expect } from "vitest";
@@ -188,14 +179,6 @@ describe("App", () => {
 });
 ```
 
-Megjegyzések:
-
-- A teszt szövegeit mindig az aktuális `App.jsx`-hez kell igazítani, mert a Vite sablon időnként változik (régen „Vite + React” volt a főcím, most „Get started”).
-- A `getByRole` úgy keres, ahogy egy felhasználó „látja” az oldalt (gomb, főcím), ezért nem törik el CSS-átírástól.
-- A `describe`, `it` és `expect` explicit importja miatt az ESLint nem jelez `'describe' is not defined` hibát.
-
-### 4.6 Futtatás
-
 ```bash
 npm test        # Tests  3 passed (3)
 npm run lint    # ha nem ír ki semmit, nincs hiba
@@ -203,36 +186,67 @@ npm run lint    # ha nem ír ki semmit, nincs hiba
 
 ---
 
-## 5. Node verzió rögzítése: `.nvmrc`
-
-```bash
-echo "24" > .nvmrc
-```
-
-Ebből olvassa a verziót a projekt mappájában az `nvm use`, és a workflow is. Így a Node verzió egyetlen helyen van megadva.
-
----
-
-## 6. A GitHub Actions workflow
+## 4. A workflow
 
 Fájl: `.github/workflows/test.yml`
 
 ```yaml
-name: Test React App
+name: Test React App (Intermediate)
 
 on:
   push:
     branches: [main]
+    paths:
+      - src/**
   pull_request:
     branches: [main]
+    paths:
+      - src/**
+
+env:
+  APP_NAME: "React App"
 
 jobs:
   test:
     runs-on: ubuntu-latest
-
+    env:
+      NODE_VERSION: "18"
     steps:
       - name: Check out repository code
         uses: actions/checkout@v5
+
+      - name: Display the branch name
+        run: |
+          echo "Ref: ${{ github.ref }}"
+          echo "Branch name: ${{ github.ref_name }}"
+
+      - name: Display the commit SHA
+        run: |
+          echo "Commit SHA: ${{ github.sha }}"
+
+      - name: Display the event name
+        run: |
+          echo "Event name: ${{ github.event_name }}"
+
+      - name: Display variables
+        env:
+          TEST_FLAG: "true"
+        run: |
+          echo "APP_NAME (workflow): ${{ env.APP_NAME }}"
+          echo "NODE_VERSION (job): ${{ env.NODE_VERSION }}"
+          echo "TEST_FLAG (step): ${{ env.TEST_FLAG }}"
+
+      - name: Push event message
+        if: github.event_name == 'push'
+        run: echo "This is a push event"
+
+      - name: Pull request event message
+        if: github.event_name == 'pull_request'
+        run: echo "This is a pull request event"
+
+      - name: Display extra flag
+        run: |
+          echo "EXTRA_FLAG: ${{ env.EXTRA_FLAG || 'none' }}"
 
       - name: Set up Node.js
         uses: actions/setup-node@v5
@@ -244,83 +258,183 @@ jobs:
         run: npm install
 
       - name: Run tests
+        if: ${{ !contains(github.event.head_commit.message, '[skip-tests]')}}
         run: npm test
 ```
 
-Mi micsoda:
+### 4.1 Az alaplépések
 
-| Elem                       | Jelentés                                                                                     |
-| -------------------------- | -------------------------------------------------------------------------------------------- |
-| `name`                     | A workflow neve az Actions fülön.                                                            |
-| `on.push.branches`         | Lefut, ha a `main`-re pusholunk.                                                             |
-| `on.pull_request.branches` | Lefut, ha egy PR a `main`-be akar beolvadni (a `main` itt a **cél** branch).                 |
-| `jobs.test`                | A job azonosítója (szabadon választható név).                                                |
-| `runs-on`                  | A GitHub egy friss Ubuntu virtuális gépet ad hozzá.                                          |
-| `steps`                    | A lépések listája, minden `-` egy új lépés.                                                  |
-| `uses`                     | Kész action meghívása; a `@v5` a fő verzió (a Marketplace-en érdemes megnézni a legújabbat). |
-| `with`                     | Az action paraméterei.                                                                       |
-| `node-version-file`        | A `.nvmrc`-ből olvassa a Node verziót (helyette lehetne `node-version: '24'` is).            |
-| `cache: 'npm'`             | Gyorsítótárazza a csomagokat, így a későbbi futások gyorsabbak.                              |
-| `run`                      | Sima shell parancs a runneren.                                                               |
+| Lépés                    | Miért kell                                                                                                                                                                                                   |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `actions/checkout`       | A runner üres géppel indul, a repó kódja nincs rajta. A checkout klónozza le. Azért nem automatikus, mert nem minden workflow-nak kell a kód, és így paraméterezhető is (branch, `fetch-depth`, másik repó). |
+| `actions/setup-node`     | A runneren lévő Node verziója bármikor változhat. Ez telepíti a kért verziót (a `.nvmrc` alapján 24) a hozzá tartozó npm-mel. A `cache: "npm"` a futások között megőrzi a letöltött csomagokat.              |
+| `npm install` / `npm ci` | A függőségek telepítése (lásd a 4.7-es pontot).                                                                                                                                                              |
+| `npm test`               | A tesztek futtatása. Bukó teszt esetén 1-es kilépési kód, amitől a job piros lesz.                                                                                                                           |
 
-**Fontos:** a tömbös forma, az `on: [push, pull_request]` is működik, de abban nem lehet branch-et megadni, így minden branch-re lefutna.
+### 4.2 Event filterek
 
-**Fontos:** üres vagy félkész workflow fájlt nem pusholunk, mert a GitHub „Invalid workflow file” hibát jelez rá.
+```yaml
+on:
+  push:
+    branches: [main]
+    paths:
+      - src/**
+```
+
+- Egy eseményen belül a `branches` és a `paths` **ÉS** kapcsolatban áll: a `main`-re kell érkeznie, **és** az `src/` alatt kell változnia valaminek.
+- A `src/**` jelentése: az `src` mappa és bármilyen mélységű almappája.
+- A `pull_request` alatt a `branches: [main]` a PR **cél** branch-ére szűr.
+- A tömbös forma (`on: [push, pull_request]`) is működik, de abban nem adható meg szűrő.
+
+### 4.3 Context
+
+| Kifejezés           | Push a `main`-re  | Pull request                |
+| ------------------- | ----------------- | --------------------------- |
+| `github.ref`        | `refs/heads/main` | `refs/pull/1/merge`         |
+| `github.ref_name`   | `main`            | `1/merge`                   |
+| `github.sha`        | a pusholt commit  | egy ideiglenes merge commit |
+| `github.event_name` | `push`            | `pull_request`              |
+
+**Miért `refs/pull/1/merge` PR-nál?** A GitHub a PR-nál egy ideiglenes merge commitot készít (a PR branch beolvasztva a `main`-be), és azon futtatja a workflow-t. Így azt ellenőrzi, hogy a mergelés **utáni** állapot működik-e. Az `1` a PR sorszáma. Ezért más a SHA is, mint a branch utolsó commitjáé.
+
+A valódi branch-nevek PR-nál: `github.head_ref` (forrás, pl. `feature-test`) és `github.base_ref` (cél, pl. `main`). Ezek csak PR eseményeknél léteznek.
+
+### 4.4 Változók és hatókörük
+
+| Szint    | Hol adjuk meg           | Hol látszik                    |
+| -------- | ----------------------- | ------------------------------ |
+| Workflow | a fájl tetején, `env:`  | minden jobban, minden lépésben |
+| Job      | `jobs.<job>.env`        | csak abban a jobban            |
+| Step     | a lépésen belül, `env:` | **csak abban az egy lépésben** |
+
+Ezért kell a `TEST_FLAG`-et pontosan abba a lépésbe tenni, amelyik mindhárom változót kiírja.
+
+Kiolvasásuk: `${{ env.VALTOZO }}`. A `${{ }}` közötti kifejezést a GitHub még a parancs futtatása előtt behelyettesíti.
+
+**A `NODE_VERSION: "18"` csak megjelenítésre szolgál.** A feladat ezt az értéket kéri, de a Vite 8-nak legalább Node 20.19 kell, a Node 18 pedig EOL. A tényleges Node verziót a `setup-node` a `.nvmrc`-ből veszi (24). A logban ez látszik is: `Resolved .nvmrc as 24`.
+
+### 4.5 Feltételes lépések
+
+```yaml
+- name: Push event message
+  if: github.event_name == 'push'
+  run: echo "This is a push event"
+```
+
+- Az `if` értékét a GitHub magától kifejezésként értelmezi, így ott a `${{ }}` elhagyható.
+- **Kivétel:** ha a kifejezés `!`-lel kezdődik, a `${{ }}` kötelező, mert a `!` a YAML-ben speciális karakter (tag):
+
+```yaml
+if: ${{ !contains(github.event.head_commit.message, '[skip-tests]') }}
+```
+
+- A `github.event.head_commit` csak push eseménynél létezik. PR-nál üres, ezért a `contains` hamis, és a teszt lefut.
+- A kihagyott lépés az Actions felületén **szürke, áthúzott kör** ikonnal jelenik meg. Nem lehet lenyitni, mert nem futott, és nem számít hibának: a workflow zöld marad.
+
+**`[skip-tests]` vs. `[skip ci]`:** a `[skip ci]` a GitHub beépített kulcsszava, ami az **egész workflow-t** kihagyja. A `[skip-tests]` a saját `if` feltételünk: a workflow lefut, csak a teszt lépés marad ki.
+
+### 4.6 Alapértelmezett érték
+
+```yaml
+run: |
+  echo "EXTRA_FLAG: ${{ env.EXTRA_FLAG || 'none' }}"
+```
+
+A `||` az első „igaz” értéket adja vissza. Mivel az `EXTRA_FLAG` nincs beállítva (üres), az eredmény `none`.
+
+### 4.7 `npm install` vagy `npm ci`?
+
+A CI-ba az `npm ci` a jobb választás:
+
+- szigorúan a `package-lock.json` alapján, pontosan ugyanazokat a verziókat telepíti,
+- hibával leáll, ha a `package.json` és a lock fájl nincs szinkronban,
+- mindig tiszta `node_modules`-szal indul, és nem módosítja a lock fájlt,
+- általában gyorsabb.
+
+Feltétele, hogy a `package-lock.json` a repóban legyen. Ökölszabály: lokálisan új csomaghoz `npm install`, a CI-ban `npm ci`.
 
 ---
 
-## 7. A workflow ellenőrzése
+## 5. Tesztelés
 
-| Teszt         | Teendő                                                                      | Elvárt eredmény                                                   |
-| ------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| Sikeres futás | Push a `main`-re.                                                           | Zöld pipa az Actions fülön.                                       |
-| Bukó futás    | Egy tesztben szándékosan hibás elvárás (pl. `'Count is 2'`), majd push.     | Piros X, a hibaüzenet és a hibás sor annotációként is megjelenik. |
-| Pull request  | Új branch, változtatás, `git push -u origin <branch>`, majd PR a `main`-be. | A workflow a PR oldalán is lefut („Checks”).                      |
+Fontos szabály: mivel a workflow csak `src/` változásra indul, minden olyan teszthez, aminél futást várunk (vagy ahol a **branch** szűrőt akarjuk ellenőrizni), az `src/` alatt is kell változtatni valamit. Erre a legbiztonságosabb egy komment az `src/App.jsx` elején, mert az nem rontja el a teszteket.
 
-**Miért bukik a workflow, ha bukik egy teszt?** A Vitest hibás teszt esetén 1-es kilépési kóddal áll le. A GitHub Actions minden lépésnél a kilépési kódot figyeli: a 0 siker, minden más hiba, ami az egész jobot pirosra állítja.
+| Teszt                 | Teendő                                                    | Elvárt eredmény                         | Eredmény |
+| --------------------- | --------------------------------------------------------- | --------------------------------------- | -------- |
+| Sikeres futás         | `src/` változás push a `main`-re                          | Lefut, minden lépés zöld                | ✅       |
+| Csak docs változás    | Fájl a `docs/` mappában, push a `main`-re                 | **Nem** indul el                        | ✅       |
+| Nem `main` branch     | Új branch, `src/` változás, `git push -u origin <branch>` | **Nem** indul el                        | ✅       |
+| Push esemény          | Push a `main`-re                                          | „This is a push event” a logban         | ✅       |
+| Pull request          | PR a branch-ről a `main`-be                               | „This is a pull request event” a logban | ✅       |
+| Skip tests            | `src/` változás, commit üzenet: `... [skip-tests]`        | A „Run tests” lépés kimarad             | ✅       |
+| Alapértelmezett érték | Nincs `EXTRA_FLAG`                                        | `EXTRA_FLAG: none`                      | ✅       |
 
-A Vitest GitHub Actionsben magától is ír egy „Vitest Test Report” összefoglalót a futás oldalára.
+A használt parancsok:
+
+```bash
+# Docs teszt
+mkdir docs
+echo "# Docs" > docs/notes.md
+git add docs/notes.md
+git commit -m "Add docs folder"
+git push
+
+# Nem-main branch + PR teszt
+git switch -c feature-test
+# ... komment átírása az src/App.jsx-ben ...
+git add src/App.jsx
+git commit -m "Change src on feature branch"
+git push -u origin feature-test
+# GitHub: Compare & pull request → base: main ← compare: feature-test
+
+# PR merge után
+git switch main
+git pull
+git branch -d feature-test
+
+# Skip tests teszt
+# ... komment átírása az src/App.jsx-ben ...
+git add src/App.jsx
+git commit -m "Update comment [skip-tests]"
+git push
+```
+
+**Megjegyzés:** a csak a workflow fájlt módosító push sem indítja el a workflow-t, mert az sem az `src/` alatt van.
 
 ---
 
-## Hibaelhárítás
+## Buktatók és hibaelhárítás
+
+**YAML: `: ` (kettőspont + szóköz) egy parancsban**
+Az `run: echo "Commit SHA: ..."` alak hibás YAML, mert a `: ` kulcs-érték párt jelez. Ha a szerkesztő egyszeres idézőjelek közé teszi a sort, a belső `'none'` lezárja a szöveget, és újra hiba lesz. Megoldás: `run: |` blokk, amiben a sorok nyers szövegként szerepelnek.
+
+**YAML: `!` az `if` elején**
+`if: !contains(...)` hibás. Helyesen: `if: ${{ !contains(...) }}`.
+
+**A workflow nem indul el**
+Nézd meg, hogy a commit érintette-e az `src/` mappát, és hogy a `main`-re ment-e. A szűrők ÉS kapcsolatban vannak.
 
 **`npm error Cannot read properties of null (reading 'edgesOut')`**
-Az npm 10.8.x hibája a peer dependency-k feloldásánál, a friss csomagokkal (React 19, Vite 8, ESLint 10) jön elő. A cache törlése nem segít. Megoldás: Node 24 (npm 11) nvm-mel, majd tiszta telepítés:
-
-```bash
-rm -rf node_modules package-lock.json
-npm install
-```
-
-Végső esetben: `npm install --legacy-peer-deps`.
-
-**Node 20:** 2026 áprilisa óta EOL (nem kap frissítést), ezért Node 24-et használunk lokálisan és a CI-ban is.
+Az npm 10.8.x hibája a friss csomagokkal. Megoldás: Node 24 (npm 11) nvm-mel, majd `rm -rf node_modules package-lock.json && npm install`.
 
 **`git@github.com: Permission denied (publickey)`**
-A WSL-ben nincs SSH kulcs, vagy nincs hozzáadva a GitHubhoz. Lásd az 1.2 pontot.
+Nincs SSH kulcs a WSL-ben, vagy nincs hozzáadva a GitHubhoz (lásd 2.2).
 
 **A push jelszót vagy tokent kér**
-HTTPS-sel lett klónozva a repó. Átállítás SSH-ra:
+HTTPS-sel lett klónozva. Átállítás:
 
 ```bash
-git remote set-url origin git@github.com:SziNo/react-test-github-actions-workflow.git
+git remote set-url origin git@github.com:SziNo/react-test-intermediate-gha.git
 ```
 
-**ESLint: `'describe' is not defined`**
-Importáld a tesztfájlban: `import { describe, it, expect } from 'vitest'`.
-
-**WSL: lassú `npm install`**
-A projektet a Linux fájlrendszeren (`~/...`) kell tartani, nem a `/mnt/c/...` alatt.
-
-**Forkolt repóban nem futnak a workflow-k**
-Forkban alapból le vannak tiltva: az Actions fülön egyszer engedélyezni kell. A fork leválasztható: Settings → General → Danger Zone → **Leave fork network**.
+**`punycode` / `url.parse()` DeprecationWarning a logban**
+A `setup-node` action belső figyelmeztetései, nem a mi kódunké. Nem okoznak hibát.
 
 **`ubuntu-latest` értesítés új Ubuntu verzióról**
-Csak tájékoztatás. Ha fix környezet kell: `runs-on: ubuntu-24.04`.
+Csak tájékoztatás. Fix környezethez: `runs-on: ubuntu-24.04`.
 
----
+**Git stash véletlenül**
+`git stash list`, majd ugyanazon a branch-en `git stash pop`.
 
-## Tipp: újrafelhasználás sablonként
-
-A repó beállításaiban (Settings → General) bepipálható a **Template repository** opció. Utána a „Use this template” gombbal egy kattintással új repó készíthető, amiben már benne van a React app, a tesztek és a workflow, így a következő GitHub Actions gyakorlás egyből a lényeggel kezdhető.
+**Branch törlése merge után a GitHubon**
+A PR oldalán a **Delete branch** gomb, vagy a branch-ek listájában a kuka ikon. Automatikusan: Settings → General → **Automatically delete head branches**.
