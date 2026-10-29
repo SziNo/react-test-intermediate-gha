@@ -4,7 +4,7 @@ import reactLogo from "./assets/react.svg";
 import viteLogo from "./assets/vite.svg";
 import "./App.css";
 
-// Intermediate GitHub Actions task - feature branch
+// Intermediate GitHub Actions task - skip tests check
 function App() {
   const [count, setCount] = useState(0);
 
